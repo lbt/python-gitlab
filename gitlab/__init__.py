@@ -600,6 +600,35 @@ class Gitlab(object):
         """
         return User._get_list_or_object(self, id, **kwargs)
 
+    def _list_users(self, url, exact, **kwargs):
+        r = self.rawGet(url, **kwargs)
+        if r.status_code != 200:
+            _raiseErrorFromResponse(r, GitlabListError)
+
+        l = []
+        for o in r.json():
+            u=User(self, o)
+            if exact:
+                if u.username == exact:
+                    return u
+            else:
+                l.append(u)
+
+        if exact:
+            return None
+        return l
+
+    def search_users(self, query, exact, **kwargs):
+        """Searches users by name.
+
+        Returns a list of matching users.
+
+        If 'exact' is true then only return one user with an exact match for the query
+        """
+        if exact:
+            exact=query
+        return self._list_users("/users?search=" + query, exact, **kwargs)
+
     def Team(self, id=None, **kwargs):
         """Creates/gets/lists team(s) known by the GitLab server.
 
