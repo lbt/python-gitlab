@@ -27,10 +27,26 @@ from httmock import HTTMock  # noqa
 from httmock import response  # noqa
 from httmock import urlmatch  # noqa
 
+import gitlab
 from gitlab import *  # noqa
 
 
-class TestGitLabRawMethods(unittest.TestCase):
+class TestSanitize(unittest.TestCase):
+    def test_do_nothing(self):
+        self.assertEqual(1, gitlab._sanitize(1))
+        self.assertEqual(1.5, gitlab._sanitize(1.5))
+        self.assertEqual("foo", gitlab._sanitize("foo"))
+
+    def test_slash(self):
+        self.assertEqual("foo%2Fbar", gitlab._sanitize("foo/bar"))
+
+    def test_dict(self):
+        source = {"url": "foo/bar", "id": 1}
+        expected = {"url": "foo%2Fbar", "id": 1}
+        self.assertEqual(expected, gitlab._sanitize(source))
+
+
+class TestGitlabRawMethods(unittest.TestCase):
     def setUp(self):
         self.gl = Gitlab("http://localhost", private_token="private_token",
                          email="testuser@test.com", password="testpassword",
@@ -154,7 +170,7 @@ class TestGitLabRawMethods(unittest.TestCase):
             self.assertEqual(resp.status_code, 404)
 
 
-class TestGitLabMethods(unittest.TestCase):
+class TestGitlabMethods(unittest.TestCase):
     def setUp(self):
         self.gl = Gitlab("http://localhost", private_token="private_token",
                          email="testuser@test.com", password="testpassword",
@@ -322,7 +338,7 @@ class TestGitLabMethods(unittest.TestCase):
             self.assertRaises(GitlabGetError, self.gl.get,
                               Project, 1)
 
-    def test_delete(self):
+    def test_delete_from_object(self):
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/groups/1",
                   method="delete")
         def resp_delete_group(url, request):
@@ -335,9 +351,27 @@ class TestGitLabMethods(unittest.TestCase):
             data = self.gl.delete(obj)
             self.assertIs(data, True)
 
+    def test_delete_from_invalid_class(self):
+        class InvalidClass(object):
+            pass
+
+        self.assertRaises(GitlabError, self.gl.delete, InvalidClass, 1)
+
+    def test_delete_from_class(self):
+        @urlmatch(scheme="http", netloc="localhost", path="/api/v3/groups/1",
+                  method="delete")
+        def resp_delete_group(url, request):
+            headers = {'content-type': 'application/json'}
+            content = ''.encode("utf-8")
+            return response(200, content, headers, None, 5, request)
+
+        with HTTMock(resp_delete_group):
+            data = self.gl.delete(Group, 1)
+            self.assertIs(data, True)
+
     def test_delete_unknown_path(self):
         obj = Project(self.gl, data={"name": "testname", "id": 1})
-        obj._created = True
+        obj._from_api = True
 
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/projects/1",
                   method="delete")
@@ -395,10 +429,9 @@ class TestGitLabMethods(unittest.TestCase):
         self.assertRaises(GitlabCreateError, self.gl.create, obj)
 
     def test_create_unknown_path(self):
-        obj = User(self.gl, data={"email": "email", "password": "password",
-                                  "username": "username", "name": "name",
-                                  "can_create_group": True})
-        obj._created = True
+        obj = Project(self.gl, data={"name": "name"})
+        obj.id = 1
+        obj._from_api = True
 
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/projects/1",
                   method="delete")
@@ -408,7 +441,7 @@ class TestGitLabMethods(unittest.TestCase):
             return response(404, content, headers, None, 5, request)
 
         with HTTMock(resp_cont):
-            self.assertRaises(GitlabCreateError, self.gl.create, obj)
+            self.assertRaises(GitlabDeleteError, self.gl.delete, obj)
 
     def test_create_401(self):
         obj = Group(self.gl, data={"name": "testgroup", "path": "testpath"})
@@ -503,7 +536,7 @@ class TestGitLabMethods(unittest.TestCase):
             self.assertRaises(GitlabUpdateError, self.gl.update, obj)
 
 
-class TestGitLab(unittest.TestCase):
+class TestGitlab(unittest.TestCase):
 
     def setUp(self):
         self.gl = Gitlab("http://localhost", private_token="private_token",
@@ -620,7 +653,7 @@ class TestGitLab(unittest.TestCase):
             self.assertEqual(proj.id, 1)
             self.assertEqual(proj.name, "testproject")
 
-    def test_Hook(self):
+    def test_hooks(self):
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/hooks/1",
                   method="get")
         def resp_get_hook(url, request):
@@ -629,12 +662,12 @@ class TestGitLab(unittest.TestCase):
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_hook):
-            data = self.gl.Hook(id=1)
+            data = self.gl.hooks.get(1)
             self.assertEqual(type(data), Hook)
             self.assertEqual(data.url, "testurl")
             self.assertEqual(data.id, 1)
 
-    def test_Project(self):
+    def test_projects(self):
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/projects/1",
                   method="get")
         def resp_get_project(url, request):
@@ -643,12 +676,12 @@ class TestGitLab(unittest.TestCase):
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_project):
-            data = self.gl.Project(id=1)
+            data = self.gl.projects.get(1)
             self.assertEqual(type(data), Project)
             self.assertEqual(data.name, "name")
             self.assertEqual(data.id, 1)
 
-    def test_UserProject(self):
+    def test_userprojects(self):
         @urlmatch(scheme="http", netloc="localhost",
                   path="/api/v3/projects/user/2", method="get")
         def resp_get_userproject(url, request):
@@ -657,10 +690,10 @@ class TestGitLab(unittest.TestCase):
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_userproject):
-            self.assertRaises(NotImplementedError, self.gl.UserProject, id=1,
-                              user_id=2)
+            self.assertRaises(NotImplementedError, self.gl.user_projects.get,
+                              1, user_id=2)
 
-    def test_Group(self):
+    def test_groups(self):
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/groups/1",
                   method="get")
         def resp_get_group(url, request):
@@ -670,24 +703,28 @@ class TestGitLab(unittest.TestCase):
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_group):
-            data = self.gl.Group(id=1)
+            data = self.gl.groups.get(1)
             self.assertEqual(type(data), Group)
             self.assertEqual(data.name, "name")
             self.assertEqual(data.path, "path")
             self.assertEqual(data.id, 1)
 
-    def test_Issue(self):
-        @urlmatch(scheme="http", netloc="localhost", path="/api/v3/issues/1",
+    def test_issues(self):
+        @urlmatch(scheme="http", netloc="localhost", path="/api/v3/issues",
                   method="get")
         def resp_get_issue(url, request):
             headers = {'content-type': 'application/json'}
-            content = '{"name": "name", "id": 1}'.encode("utf-8")
+            content = ('[{"name": "name", "id": 1}, '
+                       '{"name": "other_name", "id": 2}]')
+            content = content.encode("utf-8")
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_issue):
-            self.assertRaises(NotImplementedError, self.gl.Issue, id=1)
+            data = self.gl.issues.get(2)
+            self.assertEqual(data.id, 2)
+            self.assertEqual(data.name, 'other_name')
 
-    def test_User(self):
+    def test_users(self):
         @urlmatch(scheme="http", netloc="localhost", path="/api/v3/users/1",
                   method="get")
         def resp_get_user(url, request):
@@ -698,7 +735,23 @@ class TestGitLab(unittest.TestCase):
             return response(200, content, headers, None, 5, request)
 
         with HTTMock(resp_get_user):
-            user = self.gl.User(id=1)
+            user = self.gl.users.get(1)
             self.assertEqual(type(user), User)
             self.assertEqual(user.name, "name")
             self.assertEqual(user.id, 1)
+
+    def test_teams(self):
+        @urlmatch(scheme="http", netloc="localhost",
+                  path="/api/v3/user_teams/1", method="get")
+        def resp_get_group(url, request):
+            headers = {'content-type': 'application/json'}
+            content = '{"name": "name", "id": 1, "path": "path"}'
+            content = content.encode('utf-8')
+            return response(200, content, headers, None, 5, request)
+
+        with HTTMock(resp_get_group):
+            data = self.gl.teams.get(1)
+            self.assertEqual(type(data), Team)
+            self.assertEqual(data.name, "name")
+            self.assertEqual(data.path, "path")
+            self.assertEqual(data.id, 1)

@@ -21,6 +21,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import json
 try:
     import unittest
 except ImportError:
@@ -143,12 +144,59 @@ def resp_protect_branch_fail(url, request):
     return response(400, content, headers, None, 5, request)
 
 
-class TestGitLabObject(unittest.TestCase):
+class TestGitlabObject(unittest.TestCase):
 
     def setUp(self):
         self.gl = Gitlab("http://localhost", private_token="private_token",
                          email="testuser@test.com", password="testpassword",
                          ssl_verify=True)
+
+    def test_json(self):
+        gl_object = CurrentUser(self.gl, data={"username": "testname"})
+        json_str = gl_object.json()
+        data = json.loads(json_str)
+        self.assertIn("id", data)
+        self.assertEqual(data["username"], "testname")
+        self.assertEqual(data["gitlab"]["url"], "http://localhost/api/v3")
+
+    def test_data_for_gitlab(self):
+        class FakeObj1(GitlabObject):
+            _url = '/fake1'
+            requiredCreateAttrs = ['create_req']
+            optionalCreateAttrs = ['create_opt']
+            requiredUpdateAttrs = ['update_req']
+            optionalUpdateAttrs = ['update_opt']
+
+        class FakeObj2(GitlabObject):
+            _url = '/fake2'
+            requiredCreateAttrs = ['create_req']
+            optionalCreateAttrs = ['create_opt']
+
+        obj1 = FakeObj1(self.gl, {'update_req': 1, 'update_opt': 1,
+                                  'create_req': 1, 'create_opt': 1})
+        obj2 = FakeObj2(self.gl, {'create_req': 1, 'create_opt': 1})
+
+        obj1_data = json.loads(obj1._data_for_gitlab())
+        self.assertIn('create_req', obj1_data)
+        self.assertIn('create_opt', obj1_data)
+        self.assertNotIn('update_req', obj1_data)
+        self.assertNotIn('update_opt', obj1_data)
+        self.assertNotIn('gitlab', obj1_data)
+
+        obj1_data = json.loads(obj1._data_for_gitlab(update=True))
+        self.assertNotIn('create_req', obj1_data)
+        self.assertNotIn('create_opt', obj1_data)
+        self.assertIn('update_req', obj1_data)
+        self.assertIn('update_opt', obj1_data)
+
+        obj1_data = json.loads(obj1._data_for_gitlab(
+            extra_parameters={'foo': 'bar'}))
+        self.assertIn('foo', obj1_data)
+        self.assertEqual(obj1_data['foo'], 'bar')
+
+        obj2_data = json.loads(obj2._data_for_gitlab(update=True))
+        self.assertIn('create_req', obj2_data)
+        self.assertIn('create_opt', obj2_data)
 
     def test_list_not_implemented(self):
         self.assertRaises(NotImplementedError, CurrentUser.list, self.gl)
@@ -182,7 +230,7 @@ class TestGitLabObject(unittest.TestCase):
 
     def test_get_list_or_object_cant_get(self):
         with HTTMock(resp_get_issue):
-            gl_object = Issue(self.gl, data={"name": "name"})
+            gl_object = UserProject(self.gl, data={"name": "name"})
             self.assertRaises(NotImplementedError,
                               gl_object._get_list_or_object,
                               self.gl, id=1)
@@ -245,7 +293,7 @@ class TestGitLabObject(unittest.TestCase):
                                   "password": "password", "id": 1,
                                   "username": "username"})
         self.assertEqual(obj.name, "testname")
-        obj._created = True
+        obj._from_api = True
         obj.name = "newname"
         with HTTMock(resp_update_user):
             obj.save()
@@ -259,7 +307,7 @@ class TestGitLabObject(unittest.TestCase):
 
     def test_delete(self):
         obj = Group(self.gl, data={"name": "testname", "id": 1})
-        obj._created = True
+        obj._from_api = True
         with HTTMock(resp_delete_group):
             data = obj.delete()
             self.assertIs(data, True)
@@ -444,7 +492,3 @@ class TestProjectSnippet(unittest.TestCase):
     def test_blob_fail(self):
         with HTTMock(self.resp_content_fail):
             self.assertRaises(GitlabGetError, self.obj.Content)
-
-
-if __name__ == "__main__":
-    main()

@@ -11,9 +11,12 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   usage
+   install
    cli
-   api/gitlab
+   api-usage
+   faq
+   upgrade-from-0.10
+   api/modules
 
 
 Indices and tables

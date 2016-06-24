@@ -15,12 +15,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-try:
-    import ConfigParser as configparser
-except ImportError:
-    import configparser
 import os
 
+from six.moves import configparser
 
 _DEFAULT_FILES = [
     '/etc/python-gitlab.cfg',
@@ -79,5 +76,15 @@ class GitlabConfigParser(object):
             pass
         try:
             self.timeout = self._config.getint(self.gitlab_id, 'timeout')
+        except Exception:
+            pass
+
+        self.http_username = None
+        self.http_password = None
+        try:
+            self.http_username = self._config.get(self.gitlab_id,
+                                                  'http_username')
+            self.http_password = self._config.get(self.gitlab_id,
+                                                  'http_password')
         except Exception:
             pass

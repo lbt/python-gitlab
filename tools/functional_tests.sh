@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Copyright (C) 2015 Gauvain Pocentek <gauvain@pocentek.net>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,104 +14,94 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-cleanup() {
-    rm -f /tmp/python-gitlab.cfg
-    docker kill gitlab-test >/dev/null 2>&1
-    docker rm gitlab-test >/dev/null 2>&1
-    deactivate || true
-    rm -rf $VENV
-}
-trap cleanup EXIT
+setenv_script=$(dirname "$0")/build_test_env.sh || exit 1
+BUILD_TEST_ENV_AUTO_CLEANUP=true
+. "$setenv_script" "$@" || exit 1
 
-docker run --name gitlab-test --detach --publish 8080:80 --publish 2222:22 genezys/gitlab:latest >/dev/null 2>&1
+testcase "project creation" '
+    OUTPUT=$(try GITLAB project create --name test-project1) || exit 1
+    PROJECT_ID=$(pecho "${OUTPUT}" | grep ^id: | cut -d" " -f2)
+    OUTPUT=$(try GITLAB project list) || exit 1
+    pecho "${OUTPUT}" | grep -q test-project1
+'
 
-LOGIN='root'
-PASSWORD='5iveL!fe'
-CONFIG=/tmp/python-gitlab.cfg
-GITLAB="gitlab --config-file $CONFIG"
-VENV=$(pwd)/.venv
+testcase "project update" '
+    GITLAB project update --id "$PROJECT_ID" --description "My New Description"
+'
 
-virtualenv $VENV
-. $VENV/bin/activate
-pip install -rrequirements.txt
-pip install -e .
+testcase "user creation" '
+    OUTPUT=$(GITLAB user create --email fake@email.com --username user1 \
+        --name "User One" --password fakepassword)
+'
+USER_ID=$(pecho "${OUTPUT}" | grep ^id: | cut -d' ' -f2)
 
-GREEN='\033[0;32m'
-NC='\033[0m'
-OK="echo -e ${GREEN}OK${NC}"
+testcase "user get (by id)" '
+    GITLAB user get --id $USER_ID >/dev/null 2>&1
+'
 
-echo -n "Waiting for gitlab to come online... "
-I=0
-while :; do
-    sleep 5
-    curl -s http://localhost:8080/users/sign_in 2>/dev/null | grep -q "GitLab Community Edition" && break
-    let I=I+5
-    [ $I -eq 120 ] && exit 1
-done
-sleep 5
-$OK
+testcase "user get (by username)" '
+    GITLAB user get-by-username --query user1 >/dev/null 2>&1
+'
 
-# Get the token
-TOKEN=$(curl -s http://localhost:8080/api/v3/session \
-    -X POST \
-    --data "login=$LOGIN&password=$PASSWORD" \
-    | python -c 'import sys, json; print json.load(sys.stdin)["private_token"]')
+testcase "verbose output" '
+    OUTPUT=$(try GITLAB -v user list) || exit 1
+    pecho "${OUTPUT}" | grep -q avatar-url
+'
 
-cat > $CONFIG << EOF
-[global]
-default = local
-timeout = 2
+testcase "CLI args not in output" '
+    OUTPUT=$(try GITLAB -v user list) || exit 1
+    pecho "${OUTPUT}" | grep -qv config-file
+'
 
-[local]
-url = http://localhost:8080
-private_token = $TOKEN
-EOF
+testcase "adding member to a project" '
+    GITLAB project-member create --project-id "$PROJECT_ID" \
+        --user-id "$USER_ID" --access-level 40 >/dev/null 2>&1
+'
 
-echo "Config file content ($CONFIG):"
-cat $CONFIG
+testcase "file creation" '
+    GITLAB project-file create --project-id "$PROJECT_ID" \
+        --file-path README --branch-name master --content "CONTENT" \
+        --commit-message "Initial commit" >/dev/null 2>&1
+'
 
-# NOTE(gpocentek): the first call might fail without a little delay
-sleep 10
+testcase "issue creation" '
+    OUTPUT=$(GITLAB project-issue create --project-id "$PROJECT_ID" \
+        --title "my issue" --description "my issue description")
+'
+ISSUE_ID=$(pecho "${OUTPUT}" | grep ^id: | cut -d' ' -f2)
 
-set -e
+testcase "note creation" '
+    GITLAB project-issue-note create --project-id "$PROJECT_ID" \
+        --issue-id "$ISSUE_ID" --body "the body" >/dev/null 2>&1
+'
 
-echo -n "Testing project creation... "
-PROJECT_ID=$($GITLAB project create --name test-project1 | grep ^id: | cut -d' ' -f2)
-$GITLAB project list | grep -q test-project1
-$OK
+testcase "branch creation" '
+    GITLAB project-branch create --project-id "$PROJECT_ID" \
+        --branch-name branch1 --ref master >/dev/null 2>&1
+'
 
-echo -n "Testing project update... "
-$GITLAB project update --id $PROJECT_ID --description "My New Description"
-$OK
+GITLAB project-file create --project-id "$PROJECT_ID" \
+    --file-path README2 --branch-name branch1 --content "CONTENT" \
+    --commit-message "second commit" >/dev/null 2>&1
 
-echo -n "Testing user creation... "
-USER_ID=$($GITLAB user create --email fake@email.com --username user1 --name "User One" --password fakepassword | grep ^id: | cut -d' ' -f2)
-$OK
+testcase "merge request creation" '
+    OUTPUT=$(GITLAB project-merge-request create \
+        --project-id "$PROJECT_ID" \
+        --source-branch branch1 --target-branch master \
+        --title "Update README")
+'
+MR_ID=$(pecho "${OUTPUT}" | grep ^id: | cut -d' ' -f2)
 
-echo -n "Testing verbose output... "
-$GITLAB -v user list | grep -q avatar-url
-$OK
+testcase "merge request validation" '
+    GITLAB project-merge-request merge --project-id "$PROJECT_ID" \
+        --id "$MR_ID" >/dev/null 2>&1
+'
 
-echo -n "Testing CLI args not in output... "
-$GITLAB -v user list | grep -qv config-file
-$OK
+testcase "branch deletion" '
+    GITLAB project-branch delete --project-id "$PROJECT_ID" \
+        --name branch1 >/dev/null 2>&1
+'
 
-echo -n "Testing adding member to a project... "
-$GITLAB project-member create --project-id $PROJECT_ID --user-id $USER_ID --access-level 40 >/dev/null 2>&1
-$OK
-
-echo -n "Creating a file... "
-$GITLAB project-file create --project-id $PROJECT_ID --file-path README --branch-name master --content "CONTENT" --commit-message "Initial commit" >/dev/null 2>&1
-$OK
-
-echo -n "Creating a branch... "
-$GITLAB project-branch create --project-id $PROJECT_ID --branch-name branch1 --ref master >/dev/null 2>&1
-$OK
-
-echo -n "Deleting a branch... "
-$GITLAB project-branch delete --project-id $PROJECT_ID --name branch1 >/dev/null 2>&1
-$OK
-
-echo -n "Testing project deletion... "
-$GITLAB project delete --id $PROJECT_ID
-$OK
+testcase "project deletion" '
+    GITLAB project delete --id "$PROJECT_ID"
+'

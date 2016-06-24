@@ -1,3 +1,115 @@
+Version 0.13
+
+ * Add support for MergeRequest validation
+ * MR: add support for cancel_merge_when_build_succeeds
+ * MR: add support for closes_issues
+ * Add "external" parameter for users
+ * Add deletion support for issues and MR
+ * Add missing group creation parameters
+ * Add a Session instance for all HTTP requests
+ * Enable updates on ProjectIssueNotes
+ * Add support for Project raw_blob
+ * Implement project compare
+ * Implement project contributors
+ * Drop the next_url attribute when listing
+ * Remove unnecessary canUpdate property from ProjectIssuesNote
+ * Add new optional attributes for projects
+ * Enable deprecation warnings for gitlab only
+ * Rework merge requests update
+ * Rework the Gitlab.delete method
+ * ProjectFile: file_path is required for deletion
+ * Rename some methods to better match the API URLs
+ * Deprecate the file_* methods in favor of the files manager
+ * Implement star/unstar for projects
+ * Implement list/get licenses
+ * Manage optional parameters for list() and get()
+
+Version 0.12.2
+
+ * Add new `ProjectHook` attributes
+ * Add support for user block/unblock
+ * Fix GitlabObject creation in _custom_list
+ * Add support for more CLI subcommands
+ * Add some unit tests for CLI
+ * Add a coverage tox env
+ * Define GitlabObject.as_dict() to dump object as a dict
+ * Define GitlabObject.__eq__() and __ne__() equivalence methods
+ * Define UserManager.search() to search for users
+ * Define UserManager.get_by_username() to get a user by username
+ * Implement "user search" CLI
+ * Improve the doc for UserManager
+ * CLI: implement user get-by-username
+ * Re-implement _custom_list in the Gitlab class
+ * Fix the 'invalid syntax' error on Python 3.2
+ * Gitlab.update(): use the proper attributes if defined
+
+Version 0.12.1
+
+ * Fix a broken upload to pypi
+
+Version 0.12
+
+ * Improve documentation
+ * Improve unit tests
+ * Improve test scripts
+ * Skip BaseManager attributes when encoding to JSON
+ * Fix the json() method for python 3
+ * Add Travis CI support
+ * Add a decode method for ProjectFile
+ * Make connection exceptions more explicit
+ * Fix ProjectLabel get and delete
+ * Implement ProjectMilestone.issues()
+ * ProjectTag supports deletion
+ * Implement setting release info on a tag
+ * Implement project triggers support
+ * Implement project variables support
+ * Add support for application settings
+ * Fix the 'password' requirement for User creation
+ * Add sudo support
+ * Fix project update
+ * Fix Project.tree()
+ * Add support for project builds
+
+Version 0.11.1
+
+ * Fix discovery of parents object attrs for managers
+ * Support setting commit status
+ * Support deletion without getting the object first
+ * Improve the documentation
+
+Version 0.11
+
+ * functional_tests.sh: support python 2 and 3
+ * Add a get method for GitlabObject
+ * CLI: Add the -g short option for --gitlab
+ * Provide a create method for GitlabObject's
+ * Rename the _created attribute _from_api
+ * More unit tests
+ * CLI: fix error when arguments are missing (python 3)
+ * Remove deprecated methods
+ * Implement managers to get access to resources
+ * Documentation improvements
+ * Add fork project support
+ * Deprecate the "old" Gitlab methods
+ * Add support for groups search
+
+Version 0.10
+
+ * Implement pagination for list() (#63)
+ * Fix url when fetching a single MergeRequest
+ * Add support to update MergeRequestNotes
+ * API: Provide a Gitlab.from_config method
+ * setup.py: require requests>=1 (#69)
+ * Fix deletion of object not using 'id' as ID (#68)
+ * Fix GET/POST for project files
+ * Make 'confirm' an optional attribute for user creation
+ * Python 3 compatibility fixes
+ * Add support for group members update (#73)
+
+Version 0.9.2
+
+ * CLI: fix the update and delete subcommands (#62)
+
 Version 0.9.1
 
  * Fix the setup.py script

@@ -20,14 +20,11 @@ import sys
 
 import sphinx
 
+sys.path.append('../')
+sys.path.append(os.path.dirname(__file__))
 import gitlab
 
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
-
-if sphinx.version_info < (1,3,):
-    napoleon_version = "sphinxcontrib.napoleon"
-else:
-    napoleon_version = "sphinx.ext.napoleon"
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -43,7 +40,7 @@ sys.path.insert(0, os.path.abspath('..'))
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc', 'sphinx.ext.autosummary', napoleon_version,
+    'sphinx.ext.autodoc', 'sphinx.ext.autosummary', 'ext.docstrings'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -60,7 +57,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'python-gitlab'
-copyright = '2014, Gauvain Pocentek, Mika Mäenpää'
+copyright = '2013-2016, Gauvain Pocentek, Mika Mäenpää'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -116,7 +113,7 @@ pygments_style = 'sphinx'
 # a list of builtin themes.
 html_theme = 'default'
 if not on_rtd: # only import and set the theme if we're building docs locally
-    try: 
+    try:
         import sphinx_rtd_theme
         html_theme = 'sphinx_rtd_theme'
         html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
